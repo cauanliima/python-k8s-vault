@@ -1,19 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: python-app
-  namespace: app
+  name: python-k8s-vault
   labels:
-    app: python-app
+    app: python-k8s-vault
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: python-app
+      app: python-k8s-vault
   template:
     metadata:
       labels:
-        app: python-app
+        app: python-k8s-vault
       annotations:
 
         instrumentation.opentelemetry.io/inject-python: 'opentelemetry/instrumentation'
@@ -25,8 +24,8 @@ spec:
           {{- end }}
     spec:
       containers:
-      - name: python-app
-        image: cauanlima/app-python:v1.0.2
+      - name: python-k8s-vault
+        image: cauanlima/python-k8s-vault:v1.0.2
         ports:
         - containerPort: 8200
 
@@ -34,14 +33,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: python-app-service
-  namespace: app
+  name: python-k8s-vault-service
   labels:
-    app: python-app
+    app: python-k8s-vault
 spec:
   type: NodePort  # <-- Mudei para NodePort
   selector:
-    app: python-app
+    app: python-k8s-vault
   ports:
     - protocol: TCP
       port: 8000         # <-- Corrigido! Seu app FastAPI escuta na 8000, não 8200
