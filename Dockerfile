@@ -9,11 +9,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Instalar também os pacotes de auto-instrumentação
+# Instalar pacotes de auto-instrumentação
 RUN pip install --no-cache-dir opentelemetry-distro opentelemetry-instrumentation
 
-COPY app app
+# Copiar todo o conteúdo da aplicação
+COPY app/ app/
 
-# Comando ajustado para iniciar o app usando o OpenTelemetry
-CMD ["opentelemetry-instrument", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
+CMD ["opentelemetry-instrument", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]

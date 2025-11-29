@@ -1,3 +1,4 @@
+# app/main.py
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from datetime import datetime
@@ -6,50 +7,24 @@ import operator as op
 import json
 import os
 from pymongo import MongoClient
-from pymongo.errors import PyMongoError
-import sys
-
-# -------------------------
-# Logging helper
-# -------------------------
-def log_error(msg: str):
-    """Envia erros para o sistema operacional (stdout), coletado pelo Docker/K8s."""
-    print(f"[ERROR] {msg}", file=sys.stderr, flush=True)
-
-def log_info(msg: str):
-    print(f"[INFO] {msg}", flush=True)
 
 # -------------------------
 # Config
 # -------------------------
 app = FastAPI()
 
-# ---- Tratamento de erro ao acessar Vault ----
+# Load MongoDB connection string from Vault file
 VAULT_PATH = '/vault/secrets/mongodb'
 if not os.path.exists(VAULT_PATH):
-    log_error("Arquivo de segredo do Vault não foi encontrado.")
     raise RuntimeError(f"Vault secret not found at {VAULT_PATH}")
 
-try:
-    with open(VAULT_PATH, 'r', encoding='utf-8') as f:
-        secret_data = json.load(f)
-        MONGODB_URI = secret_data["MONGODB_URI"]
-except Exception as e:
-    log_error(f"Erro ao carregar segredo do Vault: {e}")
-    raise RuntimeError("Erro ao carregar segredo do Vault")
+with open(VAULT_PATH, 'r', encoding='utf-8') as f:
+    secret_data = json.load(f)
+    MONGODB_URI = secret_data["MONGODB_URI"]
 
-log_info("Segredo do Vault carregado com sucesso.")
-
-# ---- Conexão com MongoDB ----
-try:
-    client = MongoClient(MONGODB_URI)
-    db = client.get_default_database()
-    calculations = db['calculations']
-    log_info("Conexão com MongoDB estabelecida com sucesso.")
-except Exception as e:
-    log_error(f"Erro ao conectar ao MongoDB: {e}")
-    raise RuntimeError("Falha ao conectar ao MongoDB")
-
+client = MongoClient(MONGODB_URI)
+db = client.get_default_database()
+calculations = db['calculations']
 
 # -------------------------
 # Safe evaluator
@@ -104,22 +79,6 @@ def safe_eval(expr: str):
         raise ValueError('Unsupported expression')
 
     return _eval(parsed)
-
-
-# -------------------------
-# Middleware global para erros não tratados
-# -------------------------
-@app.middleware("http")
-async def global_error_handler(request: Request, call_next):
-    try:
-        return await call_next(request)
-    except Exception as e:
-        log_error(f"Erro interno não tratado: {e}")
-        return JSONResponse(
-            {"error": "Erro interno no servidor"},
-            status_code=500
-        )
-
 
 # -------------------------
 # HTML
@@ -202,8 +161,6 @@ INDEX_HTML = """
   </body>
 </html>
 """
-
-
 # -------------------------
 # Routes
 # -------------------------
@@ -211,19 +168,16 @@ INDEX_HTML = """
 async def index():
     return INDEX_HTML
 
-
 @app.post("/calculate")
 async def calculate(request: Request):
     payload = await request.json()
     expr = (payload.get("expression") or "").strip()
-
     if not expr:
         return JSONResponse({"error": "Expressão vazia"}, status_code=400)
 
     try:
         result = safe_eval(expr)
     except Exception as e:
-        log_error(f"Expressão inválida: {expr} - Erro: {e}")
         return JSONResponse({"error": str(e)}, status_code=400)
 
     doc = {
@@ -231,41 +185,19 @@ async def calculate(request: Request):
         "result": str(result),
         "created_at": datetime.utcnow()
     }
-
-    # --- erro de MongoDB ---
-    try:
-        calculations.insert_one(doc)
-    except PyMongoError as e:
-        log_error(f"Erro ao salvar no MongoDB: {e}")
-        return JSONResponse(
-            {"error": "Erro ao salvar no banco de dados"},
-            status_code=500
-        )
-
+    calculations.insert_one(doc)
     doc["_id"] = str(doc.get("_id"))
     return doc
 
-
 @app.get("/history")
 async def get_history():
-    try:
-        items = list(calculations.find().sort("created_at", -1).limit(100))
-    except PyMongoError as e:
-        log_error(f"Erro ao acessar histórico no MongoDB: {e}")
-        return JSONResponse({"error": "Erro ao acessar o banco"}, status_code=500)
-
+    items = list(calculations.find().sort("created_at", -1).limit(100))
     for it in items:
         it["_id"] = str(it["_id"])
     return items
 
-
 @app.delete("/history")
 async def delete_history():
-    try:
-        calculations.delete_many({})
-    except PyMongoError as e:
-        log_error(f"Erro ao limpar MongoDB: {e}")
-        return JSONResponse({"error": "Erro ao limpar o banco"}, status_code=500)
-
+    calculations.delete_many({})
     return {"ok": True}
 

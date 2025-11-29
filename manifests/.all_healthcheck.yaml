@@ -19,9 +19,9 @@ spec:
         vault.hashicorp.com/role: "app-python-role"
         vault.hashicorp.com/agent-inject-secret-mongodb: "app/data/python"
         vault.hashicorp.com/agent-inject-template-mongodb: |
-         {{- with secret "app/data/python" -}}
-         {{ .Data.data | toJSON }}
-         {{- end }}
+          {{- with secret "app/data/python" -}}
+          {{ .Data.data | toJSON }}
+          {{- end }}
     spec:
       containers:
       - name: flask-mongo-vault
@@ -33,6 +33,23 @@ spec:
           value: production
         - name: PYTHONUNBUFFERED
           value: "1"
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10   # tempo para app iniciar
+          periodSeconds: 15         # frequência da checagem
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
 
 ---
 apiVersion: v1
